@@ -2,64 +2,72 @@
 
 namespace Differ\Formatters\Stylish;
 
-function render($astTree)
+function toString(array $arrayValue, int $depth): string
 {
-    return stylish($astTree);
+    $keys = array_keys($arrayValue);
+    $inDepth = $depth + 1;
+    $result = array_map(function ($key) use ($arrayValue, $inDepth): string {
+        $val = realValue($arrayValue[$key], $inDepth);
+        $spaceBefore = spaceBeforeString($inDepth);
+        $result = "\n{$spaceBefore}{$key}: {$val}";
+        return $result;
+    }, $keys);
+    return implode('', $result);
 }
 
-function stylish(array $astTree, int $depth = 0)
-{
-    $indent = buildIndent($depth, 4);
-
-    $result = array_map(function ($node) use ($depth, $indent) {
-        $depth += 1;
-        switch ($node['type']) {
-            case 'nested':
-                return $indent . "    " . $node['key'] . ": " . stylish($node['children'], $depth) . PHP_EOL;
-            case 'added':
-                $valueAdd = stringify($node['value'], $depth);
-                return $indent . "  + " . $node['key'] . ": " . $valueAdd . PHP_EOL;
-            case 'removed':
-                $valueRemoved = stringify($node['value'], $depth);
-                return $indent . "  - " . $node['key'] . ": " . $valueRemoved . PHP_EOL;
-            case 'changed':
-                $valueRemoved = stringify($node['value']['valueRemoved'], $depth);
-                $valueAdd = stringify($node['value']['valueAdd'], $depth);
-                $nodeRemoved = $node['key'] . ": " . $valueRemoved . PHP_EOL;
-                $nodeAdd = $node['key'] . ": " . $valueAdd;
-                return $indent . "  - " . $nodeRemoved . $indent . "  + " . $nodeAdd . PHP_EOL;
-            case 'unchanged':
-                $valueUnchanged = stringify($node['value'], $depth);
-                return $indent . "    " . $node['key'] . ": " . $valueUnchanged . PHP_EOL;
-            default:
-                throw new \Exception("Unknown type: {$node['type']}");
-        }
-    }, $astTree);
-    return '{' . PHP_EOL . implode("", $result) . $indent . '}';
-}
-
-function buildIndent($depth, $quantityOfGaps)
-{
-    $spaceMultiplier = $depth * $quantityOfGaps;
-    return str_repeat(" ", $spaceMultiplier);
-}
-
-function stringify($value, $depth)
+function realValue(mixed $value, int $depth): string
 {
     if (is_bool($value)) {
         return $value ? 'true' : 'false';
-    }
-    if (is_null($value)) {
+    } elseif (is_null($value)) {
         return 'null';
+    } elseif (is_array($value)) {
+        $result = toString($value, $depth);
+        $spaceBefore = spaceBeforeString($depth);
+        $bracketsResult = "{{$result}\n{$spaceBefore}}";
+        return $bracketsResult;
     }
-    if (!is_object($value)) {
-        return (string) $value;
-    }
-    $indent = buildIndent($depth, 4);
-    $stringOfArray = array_map(function ($key, $item) use ($depth, $indent) {
-        $depth += 1;
-        $typeOfValueOfNode = (is_object($item)) ? stringify($item, $depth) : $item;
-        return $indent . "    " . "{$key}: " . $typeOfValueOfNode . PHP_EOL;
-    }, array_keys(get_object_vars($value)), get_object_vars($value));
-    return '{' . PHP_EOL . implode("", $stringOfArray) . $indent . '}';
+
+    return "{$value}";
+}
+
+function spaceBeforeString(int $depth): string
+{
+    return str_repeat('    ', $depth);
+}
+
+function getStylishFormat(array $tree, int $depth = 0): array
+{
+    $spaceBefore = spaceBeforeString($depth);
+    $nextDepth = $depth + 1;
+
+    return $list = array_map(function ($node) use ($spaceBefore, $nextDepth) {
+        switch ($node['type']) {
+            case 'added':
+                $value = realValue($node['value'], $nextDepth);
+                return "{$spaceBefore}  + {$node['key']}: {$value}";
+            case 'removed':
+                $value = realValue($node['value'], $nextDepth);
+                return "{$spaceBefore}  - {$node['key']}: {$value}";
+            case 'unchanged':
+                $value = realValue($node['value'], $nextDepth);
+                return "{$spaceBefore}    {$node['key']}: {$value}";
+            case 'changed':
+                $newValue = realValue($node['secondValue'], $nextDepth);
+                $oldValue = realValue($node['firstValue'], $nextDepth);
+                return "{$spaceBefore}  - {$node['key']}: {$oldValue}" .
+                "\n{$spaceBefore}  + {$node['key']}: {$newValue}";
+            case 'array':
+                $stringNested = implode("\n", getStylishFormat($node['children'], $nextDepth));
+                return "{$spaceBefore}    {$node['key']}: {\n{$stringNested}\n{$spaceBefore}    }";
+            default:
+                throw new \Exception("error, default case");
+        }
+    }, $tree);
+}
+
+function stylishFormat(array $formatedTree): string
+{
+    $implodeIndent = implode("\n", getStylishFormat($formatedTree));
+    return "{\n{$implodeIndent}\n}";
 }

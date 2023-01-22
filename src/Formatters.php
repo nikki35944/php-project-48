@@ -2,16 +2,18 @@
 
 namespace Differ\Formatters;
 
-function format($astTree, $formatName)
+use function Differ\Formatters\Stylish\stylishFormat;
+use function Differ\Formatters\Plain\plainFormat;
+use function Differ\Formatters\Json\jsonFormat;
+
+function format(array $tree, string $format)
 {
-    switch ($formatName) {
+    switch ($format) {
         case 'stylish':
-            return Stylish\render($astTree);
+            return stylishFormat($tree);
         case 'plain':
-            return Plain\render($astTree);
+            return plainFormat($tree);
         case 'json':
-            return Json\render($astTree);
-        default:
-            throw new \Exception("Unknown formatter: $formatName");
+            return jsonFormat($tree);
     }
 }

@@ -2,53 +2,46 @@
 
 namespace Differ\Formatters\Plain;
 
-function render($astTree)
+function format(array $tree, string $path = ''): array
 {
-    return plain($astTree);
-}
-
-function plain($astTree, $nestedProperty = '')
-{
-
-    $result = array_map(function ($node) use ($nestedProperty) {
+    $result = array_map(function ($node) use ($path) {
+        $property = "{$path}{$node['key']}";
         switch ($node['type']) {
-            case 'nested':
-                $nestedProperty .=  $node['key'] . ".";
-                return plain($node['children'], $nestedProperty);
             case 'added':
-                $valueAdd = stringify($node['value']);
-                return "Property '" . $nestedProperty . $node['key'] . "' was added with value: " . $valueAdd . PHP_EOL;
+                $value = realValue($node['value']);
+                return "Property '{$property}' was added with value: {$value}";
             case 'removed':
-                return "Property '" . $nestedProperty . $node['key'] . "' was removed" . PHP_EOL;
-            case 'changed':
-                $valueRemoved = stringify($node['value']['valueRemoved']);
-                $valueAdd = stringify($node['value']['valueAdd']);
-                $nodeRemoved = "From " . $valueRemoved;
-                $nodeAdd = " to " . $valueAdd . PHP_EOL;
-                return "Property '" . $nestedProperty . $node['key'] . "' was updated. " . $nodeRemoved . $nodeAdd;
+                return "Property '{$property}' was removed";
             case 'unchanged':
                 return '';
+            case 'changed':
+                $firstValue = realValue($node['firstValue']);
+                $secondValue = realValue($node['secondValue']);
+                return "Property '{$property}' was updated. From {$firstValue} to {$secondValue}";
+            case 'array':
+                $path2 = "{$path}{$node['key']}.";
+                return implode("\n", format($node['children'], $path2));
             default:
-                throw new \Exception("Unknown type: {$node['type']}");
+                throw new \Exception("error, default case");
         }
-    }, $astTree);
-
-    return implode("", $result);
+    }, $tree);
+    return array_filter($result);
 }
 
-function stringify($value)
+function plainFormat(array $data): string
+{
+    $lines = format($data);
+    return implode("\n", $lines);
+}
+
+function realValue(mixed $value): string
 {
     if (is_bool($value)) {
         return $value ? 'true' : 'false';
-    }
-    if (is_null($value)) {
+    } elseif (is_null($value)) {
         return 'null';
-    }
-    if (is_string($value)) {
-        return "'{$value}'";
-    }
-    if (is_object($value)) {
+    } elseif (is_array($value)) {
         return '[complex value]';
     }
-    return (string) $value;
+    return var_export($value, true);
 }
